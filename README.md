@@ -1,7 +1,7 @@
 <h1 align="center">MolLingual</h1>
 <p align="center"><a href="#abstract">📝 Paper</a> | <a href="#3-benchmark-datasets">🤗 Benchmark datasets</a> | <a href="https://huggingface.co/collections/Neeze/mol-lingual">🚩 Checkpoints</a> | <a href="https://huggingface.co/collections/Neeze/mol-lingual">⚙️ Application</a> | <a href="#citation">📚 Cite our paper!</a></p>
 
-The official implementation of manuscript **"MolLingual: Language-Guided Molecular Generation"**
+The official implementation of manuscript **"ChemAligner-T5: A Unified Text-to-Molecule Model via Representation Alignment"**
 
 ## Abstract
 > <place_holder for abstract>
