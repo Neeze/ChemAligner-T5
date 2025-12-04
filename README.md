@@ -1,4 +1,4 @@
-<h1 align="center">MolLingual</h1>
+<h1 align="center">ChemAligner-T5</h1>
 <p align="center"><a href="#abstract">📝 Paper</a> | <a href="#3-benchmark-datasets">🤗 Benchmark datasets</a> | <a href="https://huggingface.co/collections/Neeze/chemaligner-t5">🚩 Checkpoints</a> | <a href="https://huggingface.co/collections/Neeze/chemaligner-t5">⚙️ Application</a> | <a href="#citation">📚 Cite our paper!</a></p>
 
 The official implementation of manuscript **"ChemAligner-T5: A Unified Text-to-Molecule Model via Representation Alignment"**
