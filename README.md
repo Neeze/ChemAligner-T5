@@ -15,8 +15,8 @@ The official implementation of manuscript **"ChemAligner-T5: A Unified Text-to-M
 ### 1. Environment preparation
 Create an environment using Miniconda or Conda:
 ```zsh
-conda create -n MolLingual python=3.10
-conda activate MolLingual
+conda create -n ChemAligner python=3.10
+conda activate ChemAligner
 ```
 
 After cloning the repo, run the following command to install required packages:
