@@ -1,7 +1,6 @@
 import lightning as pl
 from transformers import AutoModel
-from src.backbones.lang.mammut_t5 import T5ForConditionalGeneration
-from src.backbones.vision.swin import SwinTransformer
+from transformers.models.t5 import T5ForConditionalGeneration
 import torch
 from torch import optim
 import math
@@ -37,16 +36,14 @@ class T5Model(pl.LightningModule):
                 labels=None,):
         labels[labels == self.args.tokenizer.pad_token_id] = -100
         
-        output = self.t5_model.forward_train(
+        output = self.t5_model(
             input_ids = input_ids,
             attention_mask = attention_mask,
             labels = labels,
-            seq2seq_loss_weight=1.0,
-            contrastive_loss_weight=0.5,
             output_attentions=True # ADD HERE
         )
         
-        return output.loss, output.logits, output.lm_loss, output.contrastive_loss
+        return output.loss, output.logits
     
     def forward2(self, input_ids, 
                 attention_mask, 
@@ -57,8 +54,6 @@ class T5Model(pl.LightningModule):
             input_ids = input_ids,
             attention_mask = attention_mask,
             labels = labels,
-            seq2seq_loss_weight=1.0,
-            contrastive_loss_weight=0.5,
             output_attentions=True # ADD HERE
         )
         
@@ -66,20 +61,18 @@ class T5Model(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         input_ids, attention_mask, labels = self.__prepare_inputs(batch)
-        loss, _, lm_loss, contrastive_loss = self(input_ids, attention_mask, labels)
-        self.log("train_loss", loss, prog_bar=True, logger=True)
-        self.log("train_lm_loss", lm_loss, prog_bar=False, logger=True)
-        self.log("train_cotrastive_loss", contrastive_loss, prog_bar=False, logger=True)
+        loss, _ = self(input_ids, attention_mask, labels)
+        self.log("train/lm_loss", loss, prog_bar=True, logger=True)
         
         return loss
     
     def validation_step(self, batch, batch_idx):
         input_ids, attention_mask, labels = self.__prepare_inputs(batch)
-        loss, _, lm_loss, contrastive_loss = self(input_ids, attention_mask, labels)
-        self.log('eval_loss', loss, prog_bar=True, logger=True)
-        self.log("eval_lm_loss", lm_loss, prog_bar=False, logger=True)
-        self.log("eval_cotrastive_loss", contrastive_loss, prog_bar=False, logger=True)
-            
+        loss, _ = self(input_ids, attention_mask, labels)
+        self.log('val/lm_loss', loss, prog_bar=True, logger=True)
+        
+        # Monitor loss is eval_loss
+        self.log('eval_loss', loss, prog_bar=False, logger=False)
     
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.args.lr)
@@ -93,7 +86,7 @@ class T5Model(pl.LightningModule):
         }
         return [optimizer], [scheduler]
     
-    def generate_captioning(self, inputs,
+    def generate_molecule(self, inputs,
                             max_length = 512,
                             num_beams= 1,
                             do_sample=False,
@@ -114,7 +107,7 @@ class T5Model(pl.LightningModule):
             pad_token_id=pad_token_id
         )
         
-        outputs = [s.replace('<unk>', '').replace('<pad>', '').replace('</s>', '').strip() for s in self.tokenizer.batch_decode(outputs)]
+        outputs = [s.replace('<unk>', '').replace('<pad>', '').replace('</s>', '').replace('<bom>', '').replace('<eom>', '').strip() for s in self.tokenizer.batch_decode(outputs)]
         
         return outputs
         

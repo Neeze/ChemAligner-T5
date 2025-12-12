@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 # Nếu có mô-đun Text2MolMLP
 try:
-    from .text2mol import Text2MolMLP
+    from .text2mol_metrics import Text2MolMLP
 except ImportError:
     Text2MolMLP = None
 

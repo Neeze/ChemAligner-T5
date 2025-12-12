@@ -133,7 +133,7 @@ class Inferencer:
         ALL_OUTPUTS = []
         for smiles_batch in self._batch(list_of_smiles_seqs, batch_size):
             inputs_batch = self._prepare_inputs_batch(smiles_batch)
-            outputs = self.model.generate_captioning(
+            outputs = self.model.generate_molecule(
                 inputs_batch,
                 num_beams=num_beams,
                 do_sample=do_sample,

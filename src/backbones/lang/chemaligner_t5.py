@@ -24,6 +24,7 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from transformers.activations import ACT2FN
@@ -33,7 +34,7 @@ from transformers.modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel, ModuleUtilsMixin
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     DUMMY_INPUTS,
@@ -921,6 +922,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        enable_causal: Optional[bool] = None,  # <<< NEW
     ):
         # Model parallel
         if self.model_parallel:
@@ -970,10 +972,41 @@ class T5Stack(T5PreTrainedModel):
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
+        
+        if enable_causal is None:
+            enable_causal = bool(self.is_decoder)
+        
+        device = inputs_embeds.device
+        dtype = inputs_embeds.dtype
 
+        if not (attention_mask.dim() == 2 and self.config.is_decoder and enable_causal):
+            # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
+            if device is not None:
+                warnings.warn(
+                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                )
+
+        # Build extended_attention_mask manually để kiểm soát causal
+        if attention_mask.dim() == 3:
+            extended_attention_mask = attention_mask[:, None, :, :]
+        elif attention_mask.dim() == 2:
+            if self.is_decoder and enable_causal:
+                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
+                    input_shape, attention_mask, inputs_embeds.device
+                )
+            else:
+                extended_attention_mask = attention_mask[:, None, None, :]
+        else:
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(
+                f"Wrong shape for {err_msg_prefix}attention_mask (shape {attention_mask.shape})"
+            )
+
+        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        # extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1504,6 +1537,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
+        # Language projection
+        self.lang_proj = nn.Linear(config.d_model, config.d_model // 4)
+
+        # Molecule projection
+        self.mol_proj = nn.Linear(config.d_model, config.d_model // 4)
+
         # contrastive learning temperature
 
         self.temperature = nn.Parameter(torch.Tensor([1.]))
@@ -1712,6 +1751,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
     
+    def clip_contrastive_pair_loss(self, x, y, tau):
+        B = x.size(0)
+        logits = torch.matmul(x, y.t()) / tau
+        target = torch.arange(B, device=x.device)
+        loss = F.cross_entropy(logits, target)
+        return loss
+
     def forward_train(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1853,6 +1899,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=True,
             return_dict=True,
+            enable_causal=False # Disable causale mask
         )
         
         # Get decoder embeddings from first pass (mean pooling)
@@ -1886,6 +1933,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
+            enable_causal=True, # with causal mask
         )
         
         # Shape: (batch_size, target_seq_length, hidden_size)
@@ -1916,27 +1964,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # This encourages the model to learn aligned representations
         # ========================================================================
         contrastive_loss = torch.tensor(0.0, device=device)
+        tau_lm = self.temperature.exp()
+        lang_emb = self.lang_proj(encoder_embeddings)
+        mol_emb = self.mol_proj(decoder_embeddings)  
+        lang_emb_norm = torch.nn.functional.normalize(lang_emb, dim=-1)
+        mol_emb_norm = torch.nn.functional.normalize(mol_emb, dim=-1)
         
-        # Normalize embeddings for contrastive learning
-        # Shape: (batch_size, hidden_size)
-        encoder_embeddings_norm = torch.nn.functional.normalize(encoder_embeddings, dim=-1)
-        decoder_embeddings_norm = torch.nn.functional.normalize(decoder_embeddings, dim=-1)
+        lang2mol = self.clip_contrastive_pair_loss(lang_emb_norm, mol_emb_norm, tau_lm)
+        mol2lang = self.clip_contrastive_pair_loss(mol_emb_norm, lang_emb_norm, tau_lm)
         
-        # Compute similarity matrix: (batch_size, batch_size)
-        # Use self.temperature (learnable parameter) with exp() to ensure it's positive
-        temperature_value = self.temperature.exp()
-        sim = torch.matmul(encoder_embeddings_norm, decoder_embeddings_norm.t()) * temperature_value
-        
-        # Contrastive labels (diagonal elements are positive pairs)
-        contrastive_labels = torch.arange(batch_size, device=device)
-        
-        # Bidirectional contrastive loss
-        loss_fct = CrossEntropyLoss()
-        contrastive_loss = (
-            loss_fct(sim, contrastive_labels) +  # encoder -> decoder
-            loss_fct(sim.t(), contrastive_labels)  # decoder -> encoder
-        ) * 0.5
-        contrastive_loss = contrastive_loss * contrastive_loss_weight
+        lang_and_mol_contrastive_loss = (lang2mol + mol2lang) * 0.5
+        contrastive_loss = lang_and_mol_contrastive_loss * contrastive_loss_weight
         
         # ========================================================================
         # TOTAL LOSS: Seq2Seq + Contrastive

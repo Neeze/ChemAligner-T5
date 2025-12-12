@@ -58,7 +58,7 @@ def main(args):
                 except:
                     pass
             # batch = {k:v.to('cuda') if isinstance(v, torch.Tensor) or isinstance(v, ) else v for k,v in batch.items()}
-            pred_selfies = model.generate_captioning(batch, decoder_start_token_id=0)
+            pred_selfies = model.generate_molecule(batch, decoder_start_token_id=0)
             gt_selfies = batch['selfies']
             
             for p, g in zip(pred_selfies, gt_selfies):
