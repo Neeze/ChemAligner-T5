@@ -46,7 +46,7 @@ dataset_init:
   dataset_name: "lpm-24-extra"
   task: "lang2mol"
   train_batch_size: 8
-  val_batch_size: 64
+  eval_batch_size: 64
   num_workers: 24
   pin_memory: True
   persistent_workers: True
