@@ -338,7 +338,10 @@ python train.py --model_config src/configs/lpm24_train.yaml
 #### Evaluate on LPM-24 dataset
 ```zsh
 python eval_lang2mol.py --model_config src/configs/lpm24_eval.yaml
+```
 
+```zsh
+torchrun --nproc_per_node=<your devices> --model_config src/configs/lpm24_eval.yaml
 ```
 
 ### CheBI-20 dataset:
@@ -349,6 +352,10 @@ python train.py --model_config src/configs/chebi20_train.yaml
 #### Evaluate on CheBI-20
 ```zsh
 python eval_lang2mol.py --model_config src/configs/chebi20_eval.yaml
+```
+
+```zsh
+torchrun --nproc_per_node=<your devices> eval_lang2mol.py --model_config src/configs/chebi20_eval.yaml
 ```
 
 ### Push to hub
