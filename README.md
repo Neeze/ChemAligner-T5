@@ -122,5 +122,17 @@ python app.py
 ## Citation
 If you are interested in my paper, please cite:
 ```
-<place_holder>
+@inproceedings{Phan2026ChemAlignerT5,
+  title     = {ChemAligner-T5: A Unified Text-to-Molecule Model via Representation Alignment},
+  author    = {Nam, Van Hai Phan and
+               Khoa, Minh Nguyen and
+               Phu, Nguyen Ngoc Thien and
+               Nguyen, Doan Hieu Nguyen and
+               Tri, Minh Pham and
+               Duc, Dang Ngoc Minh},
+  booktitle = {Proceedings of the 2nd International Conference on Computational Intelligence in Engineering Science},
+  year      = {2026},
+  month     = apr,
+  address   = {Nha Trang, Khanh Hoa, Vietnam}
+}
 ```
